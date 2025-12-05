@@ -14,12 +14,13 @@ typedef struct List{
 }List;
 
 List* list_create();
-Node* node_create();
+Node* nodeL_create();
 void flist_insert(List* list, void* val);
 void blist_insert(List* list, void* val);
 Node* list_find(List* lsit, void* val, cmp_func cmp);
-void list_remove(List* list, void* val, cmp_func cmp, free_func);
+int list_remove(List* list, void* val, cmp_func cmp, free_func);
 void list_destroy(List* list, free_func);
+int LISTmode(void);
 
 
 #endif

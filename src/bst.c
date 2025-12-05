@@ -1,7 +1,11 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include "bst.h"
 #include "ds_common.h"
-#include <stdlib.h>
-#include <stdio.h>
+#include "visual.h"
+#include <ncurses.h>
+#include <time.h>
+
 
 
 Tree* bst_create(cmp_func cmp){
@@ -12,7 +16,7 @@ Tree* bst_create(cmp_func cmp){
     return tree;
 }
 
-BSTNode* node_create(void* key, void* value){
+BSTNode* nodeT_create(void* key, void* value){
     BSTNode* node = (BSTNode*)malloc(sizeof(BSTNode));
     node->key = key;
     node->value = value;
@@ -22,7 +26,7 @@ BSTNode* node_create(void* key, void* value){
 }
 
 void bst_insert(void* key, Tree* tree, void* value){
-    BSTNode* node = node_create(key, value);
+    BSTNode* node = nodeT_create(key, value);
     BSTNode* contrast = tree->head;
     cmp_func method = tree->cmpFunc;
     if(tree->size == 0){
@@ -33,7 +37,7 @@ void bst_insert(void* key, Tree* tree, void* value){
     while(1){
         int result = method(contrast->key, key);
         if(result == 0){
-            printf("There is already a equal key,please input another key.");
+            printf("There is already a equal key,please input another key.\n");
             return;
         }
         if(result > 0){
@@ -72,54 +76,58 @@ BSTNode* bst_find(void* key, Tree* tree, BSTNode** parents){
             node = node->right;
         }
     }
-    printf("No found.");
     return NULL;
 }
-//Binary inorder traversal
-void bitTree(BSTNode* node, void** bitArray, int* index){
-    
-    if(node->left){
-        bitTree(node->left, bitArray, index);
-    }
-    bitArray[(*index)++] = node->key;
-    if(node->right){
-        bitTree(node->right, bitArray, index);
-    }
-    return;
-}
 
-void bst_remove(void* key, Tree* tree){
-    void** bitArray = (void**)malloc(sizeof(void*) * tree->size);
-    int index = 0;
-    BSTNode *node, *parents = NULL;
+
+int bst_remove(void* key, Tree* tree){
+    BSTNode* parents = NULL;
     BSTNode* targetn = bst_find(key, tree, &parents); 
-    if(targetn == NULL) return;
-    int choose = tree->cmpFunc(parents->key, key); 
+    if(targetn == NULL) return 0; 
+    int isHead = (parents == NULL);
+    int choose = isHead ? 0 : tree->cmpFunc(parents->key, key);
+
     //childless
     if(targetn->left == NULL && targetn->right == NULL){
-        if(choose > 0) parents->left = NULL;
-        else parents->right = NULL;
+        if(!isHead){
+            if(choose > 0) parents->left = NULL;
+            else parents->right = NULL;
+        }else tree->head = NULL;
         node_free(targetn);
     }else if(targetn->left == NULL){        //only child
-        if(choose > 0) parents->left = targetn->right;
-        else parents->right = targetn->right;
+        if(!isHead){
+            if(choose > 0) parents->left = targetn->right;
+            else parents->right = targetn->right;
+        }else tree->head = targetn->right;
         node_free(targetn);
     }else if(targetn->right == NULL){
-        if(choose > 0) parents->left = targetn->left;
-        else parents->right = targetn->left;
+        if(!isHead){
+            if(choose > 0) parents->left = targetn->left;
+            else parents->right = targetn->left;
+        }else tree->head = targetn->left;
         node_free(targetn);
     }else{    
-        bitTree(tree->head, bitArray, &index);                               //gemini
-        while(key != bitArray[index]){
-            index++;
+        BSTNode* minParents, * minLeft;
+        minLeft = targetn->right;
+        minParents = targetn;
+        while(minLeft->left){
+            minParents = minLeft;
+            minLeft = minLeft->left;
         }
-        node = bst_find(bitArray[index-1], tree, &parents);
-        targetn->key = node->key; targetn->value = node->value;
-        bst_remove(node->key, tree);
+
+        targetn->key = minLeft->key;
+        targetn->value = minLeft->value;
+        if(minParents == targetn){
+            targetn->right = minLeft->right;
+        }else{
+            minParents->left = minLeft->right;
+        }
+        node_free(minLeft);
     }
     tree->size--; 
-    node_free(bitArray);
+    return 1;
 }//There are three cases: childless, only child and gemini.
+
 
 void bst_destroyn(BSTNode* node, free_func free){
     if(node->left){
@@ -128,6 +136,8 @@ void bst_destroyn(BSTNode* node, free_func free){
     if(node->right){
         bst_destroyn(node->right, free);
     }
+    free(node->key);
+    free(node->value);
     free(node);
     return;
 }//free()
@@ -136,4 +146,45 @@ void bst_destroy(Tree* tree, free_func free){
     bst_destroyn(tree->head, free);
     free(tree);
     return;
+}
+
+int BSTmode(void){
+
+
+    WINDOW* win = newwin(MAX_Y, MAX_X, 0, 0);
+
+    Tree* tree = bst_create(int_cmp);
+    bst_insert(random_val(), tree, random_char());
+
+    draw_bst(tree, win);
+
+    while(1){
+        switch(wgetch(win)){
+            case 'i':
+                bst_insert(random_val(), tree, random_char());
+                break;
+            case 'd':
+                if(tree->head == NULL) break;
+                mvwprintw(win, 25, 0, "Input key:");
+                char buf[7];
+                wgetnstr(win, buf, 6);  
+                int key = atoi(buf);
+                while(!(bst_remove(&key, tree))){
+                    mvwprintw(win, 24, 0, "There is not this node,please reenter.");
+                    mvwprintw(win, 25, 0, "Input key:");
+                    wgetnstr(win, buf, 6);  
+                    key = atoi(buf);
+                }
+                break;
+            case 'q':
+                bst_destroy(tree, node_free);
+                delwin(win);
+                endwin();
+                return 1;
+            default:
+                break;         
+        }
+        draw_bst(tree, win);
+    }
+    return 0;
 }
